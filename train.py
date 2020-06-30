@@ -167,16 +167,20 @@ def train(
                 prev_adjs = data["adj"]
                 prev_feats = data["feats"]
                 prev_labels = data["label"]
+                prev_sampleids = data["sampleid"]
                 all_adjs = prev_adjs
                 all_feats = prev_feats
                 all_labels = prev_labels
+                all_sampleids = prev_sampleids
             elif batch_idx < 20:
                 prev_adjs = data["adj"]
                 prev_feats = data["feats"]
                 prev_labels = data["label"]
+                prev_sampleids = data["sampleid"]
                 all_adjs = torch.cat((all_adjs, prev_adjs), dim=0)
                 all_feats = torch.cat((all_feats, prev_feats), dim=0)
                 all_labels = torch.cat((all_labels, prev_labels), dim=0)
+                all_sampleids = torch.cat((all_sampleids, prev_sampleids), dim=0)
             adj = Variable(data["adj"].float(), requires_grad=False).cuda()
             h0 = Variable(data["feats"].float(), requires_grad=False).cuda()
             label = Variable(data["label"].long()).cuda()
@@ -216,6 +220,17 @@ def train(
             best_val_result["acc"] = val_result["acc"]
             best_val_result["epoch"] = epoch
             best_val_result["loss"] = avg_loss
+            #checkpointing best model so far
+            #TODO: might work only for graph mode = True 
+            cg_data = {
+                "adj": all_adjs,
+                "feat": all_feats,
+                "label": all_labels,
+                "sampleid": all_sampleids,
+                "pred": np.expand_dims(predictions, axis=0),
+                "train_idx": list(range(len(dataset))),
+            }
+            io_utils.save_checkpoint(model, optimizer, args, num_epochs=-1, cg_dict=cg_data)
         if test_dataset is not None:
             test_result = evaluate(test_dataset, model, args, name="Test")
             test_result["epoch"] = epoch
@@ -254,6 +269,7 @@ def train(
         "adj": all_adjs,
         "feat": all_feats,
         "label": all_labels,
+        "sampleid": all_sampleids,
         "pred": np.expand_dims(predictions, axis=0),
         "train_idx": list(range(len(dataset))),
     }
@@ -868,7 +884,7 @@ def enron_task(args, idx=None, writer=None):
 
 def benchmark_task(args, writer=None, feat="node-label"):
     graphs = io_utils.read_graphfile(
-        args.datadir, args.bmname, max_nodes=args.max_nodes
+        args.datadir, args.bmname, max_nodes=args.max_nodes, edge_labels=args.edge_labels
     )
     print(max([G.graph["label"] for G in graphs]))
 
@@ -1107,6 +1123,17 @@ def arg_parse():
     parser.add_argument(
         "--name-suffix", dest="name_suffix", help="suffix added to the output filename"
     )
+    parser.add_argument(
+        "--node-encoding",
+        dest="node_encoding",
+        help="Node encoding type: node-label (default) or node-feat",
+    )
+    parser.add_argument(
+        "--edge-labels",
+        dest="edge_labels",
+        action="store_true",
+        help="Enable using edge labels",
+    )
 
     parser.set_defaults(
         datadir="data",  # io_parser
@@ -1135,6 +1162,8 @@ def arg_parse():
         method="base",
         name_suffix="",
         assign_ratio=0.1,
+        node_encoding="node-label",
+        edge_labels=False,
     )
     return parser.parse_args()
 
@@ -1153,7 +1182,7 @@ def main():
 
     # use --bmname=[dataset_name] for Reddit-Binary, Mutagenicity
     if prog_args.bmname is not None:
-        benchmark_task(prog_args, writer=writer)
+        benchmark_task(prog_args, writer=writer, feat=prog_args.node_encoding)
     elif prog_args.pkl_fname is not None:
         pkl_task(prog_args)
     elif prog_args.dataset is not None:

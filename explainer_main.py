@@ -138,6 +138,11 @@ def arg_parse():
         dest="explainer_suffix",
         help="suffix added to the explainer log",
     )
+    parser.add_argument(
+        "--nodecolor",
+        dest="nodecolor",
+        help="what info to use to label nodes in the graph. options: feat, label",
+    )
 
     # TODO: Check argument usage
     parser.set_defaults(
@@ -164,6 +169,7 @@ def arg_parse():
         mask_act="sigmoid",
         multigraph_class=-1,
         multinode_class=-1,
+        nodecolor="feat",
     )
     return parser.parse_args()
 
@@ -242,6 +248,7 @@ def main():
         adj=cg_dict["adj"],
         feat=cg_dict["feat"],
         label=cg_dict["label"],
+        sampleid=cg_dict["sampleid"],
         pred=cg_dict["pred"],
         train_idx=cg_dict["train_idx"],
         args=prog_args,
@@ -279,13 +286,14 @@ def main():
             # just run for a customized set of indices
             explainer.explain_graphs(graph_indices=[1, 2, 3, 4])
         else:
-            explainer.explain(
-                node_idx=0,
-                graph_idx=prog_args.graph_idx,
-                graph_mode=True,
-                unconstrained=False,
-            )
-            io_utils.plot_cmap_tb(writer, "tab20", 20, "tab20_cmap")
+            explainer.explain_graphs(graph_indices=[prog_args.graph_idx])
+            #explainer.explain(
+            #    node_idx=0,
+            #    graph_idx=prog_args.graph_idx,
+            #    graph_mode=True,
+            #    unconstrained=False,
+            #)
+            #io_utils.plot_cmap_tb(writer, "tab20", 20, "tab20_cmap")
     else:
         if prog_args.multinode_class >= 0:
             print(cg_dict["label"])

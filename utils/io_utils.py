@@ -254,7 +254,8 @@ def log_graph(
     epoch=0,
     fig_size=(4, 3),
     dpi=300,
-    label_node_feat=False,
+    #label_node_feat=False,
+    label_node_feat=True,
     edge_vmax=None,
     args=None,
 ):
@@ -269,7 +270,10 @@ def log_graph(
 
     node_colors = []
     # edge_colors = [min(max(w, 0.0), 1.0) for (u,v,w) in Gc.edges.data('weight', default=1)]
+    #if x is torch.tensor(1., dtype=torch.float64) then x.item() = 1
     edge_colors = [w for (u, v, w) in Gc.edges.data("weight", default=1)]
+    edge_colors = [w.item() if type(w) == torch.Tensor else w for w in edge_colors]
+    #edge_colors = ['r' if type(w) == torch.Tensor else w for w in edge_colors]
 
     # maximum value for node color
     vmax = 8
@@ -291,7 +295,7 @@ def log_graph(
         elif nodecolor == "label" and "label" in Gc.nodes[i]:
             node_colors.append(Gc.nodes[i]["label"] + 1)
         elif nodecolor == "feat" and "feat" in Gc.nodes[i]:
-            # print(Gc.nodes[i]['feat'])
+            #print(Gc.nodes[i]['feat'])
             feat = Gc.nodes[i]["feat"].detach().numpy()
             # idx with pos val in 1D array
             feat_class = 0
@@ -303,16 +307,27 @@ def log_graph(
             feat_labels[i] = feat_class
         else:
             node_colors.append(1)
+    
+    if not feat_labels:
+        #feat_labels = {val: i for i, val in enumerate(Gc.nodes())}
+        feat_labels = {val: val for val in Gc.nodes()}
+
     if not label_node_feat:
         feat_labels = None
 
+    #SAHIL
+    #node_colors = [2 for i in Gc.nodes()]
+    #node_colors = [2 for i in range(Gc.number_of_nodes())]
+    #print(edge_colors)
+    print(feat_labels)
     plt.switch_backend("agg")
     fig = plt.figure(figsize=fig_size, dpi=dpi)
 
     if Gc.number_of_nodes() == 0:
         raise Exception("empty graph")
     if Gc.number_of_edges() == 0:
-        raise Exception("empty edge")
+        #raise Exception("empty edge")
+        print("Waning: empty edge; skipping graph")
     # remove_nodes = []
     # for u in Gc.nodes():
     #    if Gc
@@ -327,10 +342,16 @@ def log_graph(
     min_color = min([d for (u, v, d) in Gc.edges(data="weight", default=1)])
     # color range: gray to black
     edge_vmin = 2 * min_color - edge_vmax
+
+    #SAHIL
+    edge_vmax =  max([d for (u, v, d) in Gc.edges(data="weight", default=1)])
+    edge_vmin =  min([d for (u, v, d) in Gc.edges(data="weight", default=1)])
+
     nx.draw(
         Gc,
         pos=pos_layout,
-        with_labels=False,
+        #with_labels=False,
+        with_labels=True,
         font_size=4,
         labels=feat_labels,
         node_color=node_colors,
@@ -338,13 +359,24 @@ def log_graph(
         vmax=vmax,
         cmap=cmap,
         edge_color=edge_colors,
-        edge_cmap=plt.get_cmap("Greys"),
+        #edge_cmap=plt.get_cmap("Greys"),
+        edge_cmap=plt.cm.Blues,
         edge_vmin=edge_vmin,
         edge_vmax=edge_vmax,
         width=1.0,
         node_size=50,
         alpha=0.8,
     )
+
+    #SAHIL
+    # edge_labels = {}
+    #for i in edge_colors:
+    #    edge_labels[i] = i
+    edge_labels = nx.get_edge_attributes(Gc,'weight')
+    for i in edge_labels:
+        edge_labels[i] = float('%.1g' % edge_labels[i])
+    nx.draw_networkx_edge_labels(Gc, pos=pos_layout, edge_labels = edge_labels, font_size=2)
+
     fig.axes[0].xaxis.set_visible(False)
     fig.canvas.draw()
 
@@ -434,6 +466,7 @@ def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
     """
     prefix = os.path.join(datadir, dataname, dataname)
     filename_graph_indic = prefix + "_graph_indicator.txt"
+    print(filename_graph_indic)
     # index of graphs that a given node belongs to
     graph_indic = {}
     with open(filename_graph_indic) as f:
@@ -443,7 +476,10 @@ def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
             graph_indic[i] = int(line)
             i += 1
 
+
     filename_nodes = prefix + "_node_labels.txt"
+    print(filename_graph_indic)
+    print(filename_nodes)
     node_labels = []
     min_label_val = None
     try:
@@ -459,8 +495,11 @@ def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
         node_labels = [l - min_label_val for l in node_labels]
     except IOError:
         print("No node labels")
+    
 
     filename_node_attrs = prefix + "_node_attributes.txt"
+    print(filename_nodes)
+    print(filename_node_attrs)
     node_attrs = []
     try:
         with open(filename_node_attrs) as f:
@@ -475,6 +514,8 @@ def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
 
     label_has_zero = False
     filename_graphs = prefix + "_graph_labels.txt"
+    print(filename_node_attrs)
+    print(filename_graphs)
     graph_labels = []
 
     label_vals = []
@@ -486,12 +527,16 @@ def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
                 label_vals.append(val)
             graph_labels.append(val)
 
-    label_map_to_int = {val: i for i, val in enumerate(label_vals)}
-    graph_labels = np.array([label_map_to_int[l] for l in graph_labels])
+    #TODO: causes label flipping from 1->0, which might be problem. So not doing this. Need better way of doing this.
+    #label_map_to_int = {val: i for i, val in enumerate(label_vals)}
+    #graph_labels = np.array([label_map_to_int[l] for l in graph_labels])
+    graph_labels = np.array(graph_labels)
 
     if edge_labels:
         # For Tox21_AHR we want to know edge labels
         filename_edges = prefix + "_edge_labels.txt"
+        print(filename_graphs)
+        print(filename_edges)
         edge_labels = []
 
         edge_label_vals = []
@@ -504,8 +549,10 @@ def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
                 edge_labels.append(val)
 
         edge_label_map_to_int = {val: i for i, val in enumerate(edge_label_vals)}
+        print(filename_edges)
 
     filename_adj = prefix + "_A.txt"
+    print(filename_adj)
     adj_list = {i: [] for i in range(1, len(graph_labels) + 1)}
     # edge_label_list={i:[] for i in range(1,len(graph_labels)+1)}
     index_graph = {i: [] for i in range(1, len(graph_labels) + 1)}
@@ -521,16 +568,29 @@ def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
     for k in index_graph.keys():
         index_graph[k] = [u - 1 for u in set(index_graph[k])]
 
+    print(filename_adj)
+    print('G_nx start')
+    #input("PRess key to continue")
+
+    #import pdb
+    #pdb.set_trace()
+
+    node_id_start = 1
     graphs = []
     for i in range(1, 1 + len(adj_list)):
         # indexed from 1 here
         G = nx.from_edgelist(adj_list[i])
-
+        #if i - 1 == 98545:
+        #    import pdb
+        #    pdb.set_trace()
+        
         if max_nodes is not None and G.number_of_nodes() > max_nodes:
+            node_id_start += G.number_of_nodes()
             continue
 
         # add features and labels
         G.graph["label"] = graph_labels[i - 1]
+        G.graph["sampleid"] = i - 1   #ID of sample to map back to org dataset
 
         # Special label for aromaticity experiment
         # aromatic_edge = 2
@@ -548,19 +608,27 @@ def read_graphfile(datadir, dataname, max_nodes=None, edge_labels=False):
             G.graph["feat_dim"] = node_attrs[0].shape[0]
 
         # relabeling
-        mapping = {}
-        it = 0
-        if float(nx.__version__) < 2.0:
-            for n in G.nodes():
-                mapping[n] = it
-                it += 1
-        else:
-            for n in G.nodes:
-                mapping[n] = it
-                it += 1
+        #mapping = {}
+        #it = 0
+        #if float(nx.__version__) < 2.0:
+        #    for n in G.nodes():
+        #        mapping[n] = it
+        #        it += 1
+        #else:
+        #    for n in G.nodes:
+        #        mapping[n] = it
+        #        it += 1
+        
+        #new relabeling preserving original node IDs
+        mapping = {u: u - node_id_start for u in G.nodes()}
 
         # indexed from 0
         graphs.append(nx.relabel_nodes(G, mapping))
+
+        node_id_start += G.number_of_nodes()
+    
+    print('G_nx end')
+    #input("PRess key to continue")
     return graphs
 
 
@@ -664,7 +732,8 @@ def build_aromaticity_dataset():
 
 
 def gen_train_plt_name(args):
-    return "results/" + io_utils.gen_prefix(args) + ".png"
+    #return "results/" + gen_prefix(args) + ".png"
+    return "log/" + gen_prefix(args) + ".png"
 
 
 def log_assignment(assign_tensor, writer, epoch, batch_idx):

@@ -46,6 +46,7 @@ class Explainer:
         adj,
         feat,
         label,
+        sampleid,
         pred,
         train_idx,
         args,
@@ -59,6 +60,7 @@ class Explainer:
         self.adj = adj
         self.feat = feat
         self.label = label
+        self.sampleid = sampleid
         self.pred = pred
         self.train_idx = train_idx
         self.n_hops = args.num_gc_layers
@@ -214,7 +216,7 @@ class Explainer:
                 masked_adj = adj_atts.cpu().detach().numpy() * sub_adj.squeeze()
 
         fname = 'masked_adj_' + io_utils.gen_explainer_prefix(self.args) + (
-                'node_idx_'+str(node_idx)+'graph_idx_'+str(self.graph_idx)+'.npy')
+                'node_idx_'+str(node_idx)+'graph_idx_'+str(graph_idx)+'.npy')
         with open(os.path.join(self.args.logdir, fname), 'wb') as outfile:
             np.save(outfile, np.asarray(masked_adj.copy()))
             print("Saved adjacency matrix to ", fname)
@@ -292,7 +294,7 @@ class Explainer:
         return masked_adjs
 
 
-    def explain_nodes_gnn_stats(self, node_indices, args, graph_idx=0, model="exp"):
+    def explain_nodes_gnn_stats_org(self, node_indices, args, graph_idx=0, model="exp"):
         masked_adjs = [
             self.explain(node_idx, graph_idx=graph_idx, model=model)
             for node_idx in node_indices
@@ -320,6 +322,8 @@ class Explainer:
                 "graph/{}_{}_{}".format(self.args.dataset, model, i),
                 identify_self=True,
             )
+
+        os.makedirs("log/pr", exist_ok=True)
 
         pred_all = np.concatenate((pred_all), axis=0)
         real_all = np.concatenate((real_all), axis=0)
@@ -351,6 +355,22 @@ class Explainer:
 
         return masked_adjs
 
+    def explain_nodes_gnn_stats(self, node_indices, args, graph_idx=0, model="exp"):
+        masked_adjs = [
+            self.explain(node_idx, graph_idx=graph_idx, model=model)
+            for node_idx in node_indices
+        ]
+        # pdb.set_trace()
+        for i, idx in enumerate(node_indices):
+            new_idx, _, feat, _, _ = self.extract_neighborhood(idx)
+            G = io_utils.denoise_graph(masked_adjs[i], new_idx, feat, threshold_num=20)
+            io_utils.log_graph(
+                self.writer,
+                G,
+                "graph/{}_{}_{}".format(self.args.dataset, model, i),
+                identify_self=True,
+            )
+        return masked_adjs
     # GRAPH EXPLAINER
     def explain_graphs(self, graph_indices):
         """
@@ -368,14 +388,35 @@ class Explainer:
                 max_component=False,
             )
             label = self.label[graph_idx]
+            pred = np.argmax(self.pred[0][graph_idx], axis=0)
+            sampleid = self.sampleid[graph_idx]
+            print(f"Explaining learned graph for original dataset sample ID: {sampleid}")
             io_utils.log_graph(
                 self.writer,
                 G_denoised,
-                "graph/graphidx_{}_label={}".format(graph_idx, label),
+                #"graph/graphidx_{}_sampleid_{}_label={}".format(graph_idx, sampleid, label),
+                "graph/graphidx_{}_sampleid_{}_label={}_pred={}".format(graph_idx, sampleid, label, pred),
                 identify_self=False,
-                nodecolor="feat",
+                #nodecolor="feat",
+                nodecolor=self.args.nodecolor,
             )
             masked_adjs.append(masked_adj)
+
+            G_thresh_denoised = io_utils.denoise_graph(
+                masked_adj,
+                0,
+                threshold=0.3,
+                feat=self.feat[graph_idx],
+                max_component=False,
+            )
+            io_utils.log_graph(
+                self.writer,
+                G_thresh_denoised,
+                "graph/graphidx_{}_sampleid_{}_label={}_pred={}_filtered".format(graph_idx, sampleid, label, pred),
+                identify_self=False,
+                #nodecolor="feat",
+                nodecolor=self.args.nodecolor,
+            )
 
             G_orig = io_utils.denoise_graph(
                 self.adj[graph_idx],
@@ -388,9 +429,11 @@ class Explainer:
             io_utils.log_graph(
                 self.writer,
                 G_orig,
-                "graph/graphidx_{}".format(graph_idx),
+                #"graph/graphidx_{}".format(graph_idx),
+                "graph/graphidx_{}_sampleid_{}_label={}".format(graph_idx, sampleid, label),
                 identify_self=False,
-                nodecolor="feat",
+                #nodecolor="feat",
+                nodecolor=self.args.nodecolor,
             )
 
         # plot cmap for graphs' node features
@@ -904,7 +947,8 @@ class ExplainModule(nn.Module):
                 epoch=epoch,
                 identify_self=False,
                 label_node_feat=True,
-                nodecolor="feat",
+                #nodecolor="feat",
+                nodecolor=self.args.nodecolor,
                 edge_vmax=None,
                 args=self.args,
             )
@@ -927,7 +971,8 @@ class ExplainModule(nn.Module):
                 epoch=epoch,
                 identify_self=False,
                 label_node_feat=True,
-                nodecolor="feat",
+                #nodecolor="feat",
+                nodecolor=self.args.nodecolor,
                 edge_vmax=None,
                 args=self.args,
             )
@@ -956,7 +1001,8 @@ class ExplainModule(nn.Module):
                 G,
                 name=name,
                 identify_self=False,
-                nodecolor="feat",
+                #nodecolor="feat",
+                nodecolor=self.args.nodecolor,
                 epoch=epoch,
                 label_node_feat=True,
                 edge_vmax=None,

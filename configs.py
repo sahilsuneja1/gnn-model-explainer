@@ -71,6 +71,17 @@ def arg_parse():
             help='Method. Possible values: base, ')
     parser.add_argument('--name-suffix', dest='name_suffix',
             help='suffix added to the output filename')
+    parser.add_argument(
+        "--node-encoding",
+        dest="node_encoding",
+        help="Node encoding type: node-label (default) or node-feat",
+    )
+    parser.add_argument(
+        "--edge-labels",
+        dest="edge_labels",
+        action="store_true",
+        help="Enable using edge labels",
+    ) 
 
     parser.set_defaults(datadir='data', # io_parser
                         logdir='log',
@@ -98,6 +109,8 @@ def arg_parse():
                         method='base',
                         name_suffix='',
                         assign_ratio=0.1,
+                        node_encoding="node-label",
+                        edge_labels=False,
                        )
     return parser.parse_args()
 

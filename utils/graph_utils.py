@@ -24,6 +24,7 @@ class GraphSampler(torch.utils.data.Dataset):
         self.len_all = []
         self.feature_all = []
         self.label_all = []
+        self.sampleid_all = []
 
         self.assign_feat_all = []
 
@@ -36,7 +37,8 @@ class GraphSampler(torch.utils.data.Dataset):
         self.feat_dim = G_list[0].nodes[existing_node]["feat"].shape[0]
 
         for G in G_list:
-            adj = np.array(nx.to_numpy_matrix(G))
+            #adj = np.array(nx.to_numpy_matrix(G))
+            adj = np.array(nx.to_numpy_matrix(G, nodelist=list(range(G.number_of_nodes()))))
             if normalize:
                 sqrt_deg = np.diag(
                     1.0 / np.sqrt(np.sum(adj, axis=0, dtype=float).squeeze())
@@ -45,6 +47,7 @@ class GraphSampler(torch.utils.data.Dataset):
             self.adj_all.append(adj)
             self.len_all.append(G.number_of_nodes())
             self.label_all.append(G.graph["label"])
+            self.sampleid_all.append(G.graph["sampleid"])
             # feat matrix: max_num_nodes x feat_dim
             if features == "default":
                 f = np.zeros((self.max_num_nodes, self.feat_dim), dtype=float)
@@ -140,6 +143,7 @@ class GraphSampler(torch.utils.data.Dataset):
             "adj": adj_padded,
             "feats": self.feature_all[idx].copy(),
             "label": self.label_all[idx],
+            "sampleid": self.sampleid_all[idx],
             "num_nodes": num_nodes,
             "assign_feats": self.assign_feat_all[idx].copy(),
         }
